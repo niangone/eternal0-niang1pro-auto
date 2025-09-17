@@ -1,0 +1,63 @@
+name: Add Server Time
+
+on:
+  workflow_dispatch: # 允许在 Actions 页面手动触发此工作流，方便测试
+  schedule:
+    # 使用 CRON 表达式定义定时任务，所有时间均为 UTC 时间。
+    # 每隔6小时执行一次，分别在 01:00, 07:00, 13:00, 19:00 (UTC)。
+    - cron: '0 1,7,13,19 * * *'
+
+jobs:
+  add_time:
+    runs-on: ubuntu-latest # 在最新的 Ubuntu 环境上运行
+
+    steps:
+      - name: Checkout repository # 步骤1: 检出（下载）你的代码到运行环境中
+        uses: actions/checkout@v4
+
+      - name: Set up Python # 步骤2: 设置 Python 环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x' # 使用最新的 Python 3
+
+      - name: Install Playwright and dependencies # 步骤3: 安装 Playwright 及其浏览器依赖
+        run: |
+          pip install playwright
+          playwright install --with-deps chromium # 安装 Chromium 浏览器及其运行所需的所有依赖
+
+      - name: Run Time Adder Script # 步骤4: 运行你的 Python 脚本
+        env:
+          # 从 GitHub Secrets 读取环境变量，这些值绝不会在日志中明文显示
+          # 优先使用 Cookie 登录
+          REMEMBER_WEB_COOKIE: ${{ secrets.REMEMBER_WEB_COOKIE }}
+          # 如果 Cookie 失效或未设置，则使用下面的邮箱和密码
+          PTERODACTYL_EMAIL: ${{ secrets.PTERODACTYL_EMAIL }}
+          PTERODACTYL_PASSWORD: ${{ secrets.PTERODACTYL_PASSWORD }}
+        run: python main.py
+
+      - name: Commit time.txt to repo # 步骤5: 更新时间文件并提交，以保持工作流活跃
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GITHUB_TOKEN 是由 GitHub 自动提供的，用于授权
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # 总是用当前最新时间覆盖 time.txt 文件
+          echo "Last run at: $(date +'%Y-%m-%d %H:%M:%S UTC')" > time.txt
+          
+          git add time.txt
+          
+          # 检查是否有文件变动。因为每次时间戳都不同，所以理论上总会有变动。
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "⏱️ Update time.txt to keep workflow active"
+            git push
+          fi
+          
+      - name: Upload error artifacts # 步骤6: 如果脚本运行失败，上传截图用于调试
+        if: failure() # 仅在前面的步骤失败时运行
+        uses: actions/upload-artifact@v4
+        with:
+          name: error-screenshots # 上传后的文件包名称
+          path: "*.png" # 上传所有以 .png 结尾的文件
