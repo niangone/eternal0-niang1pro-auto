@@ -10,6 +10,9 @@ on:
 jobs:
   add_time:
     runs-on: ubuntu-latest # 在最新的 Ubuntu 环境上运行
+    permissions:
+      contents: write
+  
 
     steps:
       - name: Checkout repository # 步骤1: 检出（下载）你的代码到运行环境中
